@@ -627,7 +627,7 @@ const App = () => {
         mainTaskName: cleanTaskName(mt.name),
         mainTaskId: mt.id
       }))));
-      
+
     const mappedIdsSet = new Set();
     workplaceTasksFlat.forEach(wt => {
       if (wt.id) {
@@ -972,7 +972,7 @@ const App = () => {
                     />
                   </div>
                 ))}
-                
+
                 {/* ข้อมูลเวลาฝึก */}
                 <div className="md:col-span-2 mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-5">
                    <div>
@@ -1051,7 +1051,7 @@ const App = () => {
             <div className="space-y-6">
               {workplaceMainTasks.map((main, mIdx) => (
                 <div key={main.id} className={`bg-white rounded-xl border shadow-sm relative group transition-all duration-200 ${main.isConfirmed ? 'border-emerald-300 ring-1 ring-emerald-100' : 'border-slate-200 hover:border-blue-300'}`}>
-                  
+
                   {/* Header งานหลัก */}
                   <div className="p-5 border-b border-slate-100 bg-slate-50/50 rounded-t-xl flex flex-col md:flex-row gap-4 items-start md:items-center">
                     <div className="flex-1 w-full">
@@ -1067,14 +1067,14 @@ const App = () => {
                         readOnly={main.isConfirmed} 
                       />
                     </div>
-                    
+
                     <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
                       <button 
                         onClick={() => analyzeWorkplaceMainTask(main.id)} 
                         disabled={main.isAnalyzing || !main.name || main.isConfirmed} 
                         className="flex-1 md:flex-none py-2 px-4 bg-slate-800 text-white rounded-md text-xs font-medium hover:bg-slate-900 transition flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:text-slate-500"
                       >
-                        {main.isAnalyzing ? <Loader2 className="animate-spin" size={14} /> : <Wand2 size={14} />} {main.isAnalyzing ? 'กำลังวิเคราะห์...' : 'วิเคราะห์งานย่อยและขั้นตอน'}
+                        {main.isAnalyzing ? <Loader2 className="animate-spin" size={14} /> : <Wand2 size={14} />} {main.isAnalyzing ? 'กำลังวิเคราะห์...' : 'AI ช่วยแตกงานย่อย'}
                       </button>
                       {!main.isConfirmed && (
                         <button onClick={() => removeWorkplaceMainTask(main.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"><Trash2 size={18} /></button>
@@ -1086,14 +1086,14 @@ const App = () => {
                   <div className="p-5 space-y-4">
                     {(main.subTasks || []).map((sub, sIdx) => (
                       <div key={sIdx} className={`bg-white p-4 rounded-lg border flex flex-col gap-4 transition-all duration-200 ${main.isConfirmed ? 'border-slate-100' : 'border-slate-200 shadow-sm'}`}>
-                        
+
                         {/* Header งานย่อย */}
                         <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
                           <div className="flex items-center gap-2 shrink-0">
                             <div className="w-1.5 h-6 bg-blue-500 rounded-full"></div>
                             <span className="text-xs font-bold text-slate-500 w-8">{mIdx + 1}.{sIdx + 1}</span>
                           </div>
-                          
+
                           <div className="flex-1 w-full flex items-center gap-2">
                             <input
                               className={`flex-1 text-sm font-medium bg-transparent border-b border-dashed outline-none py-1 focus:border-blue-500 transition-colors ${main.isConfirmed ? 'border-transparent text-slate-700' : 'border-slate-300 text-slate-900'}`}
@@ -1103,12 +1103,12 @@ const App = () => {
                               readOnly={main.isConfirmed}
                             />
                             {!main.isConfirmed && (
-                              <button type="button" onClick={() => analyzeSingleWorkplaceSubtask(mIdx, sIdx)} disabled={sub.isAnalyzing || !sub.workplaceName} className="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-1.5 rounded disabled:bg-slate-50 disabled:text-slate-300 transition" title="ให้ระบบวิเคราะห์ขั้นตอน">
+                              <button type="button" onClick={() => analyzeSingleWorkplaceSubtask(mIdx, sIdx)} disabled={sub.isAnalyzing || !sub.workplaceName} className="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-1.5 rounded disabled:bg-slate-50 disabled:text-slate-300 transition" title="ให้ AI วิเคราะห์ขั้นตอน">
                                 {sub.isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
                               </button>
                             )}
                           </div>
-                          
+
                           <div className="flex items-center gap-3 w-full md:w-auto mt-2 md:mt-0">
                             <div className="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded border border-slate-200 shrink-0">
                               <Clock size={12} className="text-slate-400" />
@@ -1121,7 +1121,7 @@ const App = () => {
                               />
                               <span className="text-[10px] text-slate-500">ชม.</span>
                             </div>
-                            
+
                             {(sub.detailed_steps || []).length > 0 && (
                               <button
                                 onClick={() => setCollapsedWorkplaceSubTasks(prev => { const s = new Set(prev); s.has(sub.id) ? s.delete(sub.id) : s.add(sub.id); return s; })}
@@ -1135,7 +1135,7 @@ const App = () => {
                             )}
                           </div>
                         </div>
-                        
+
                         {/* ขั้นตอนปฏิบัติงาน */}
                         <div className={`pl-4 md:pl-10 space-y-2 ${collapsedWorkplaceSubTasks.has(sub.id) ? 'hidden' : 'block'}`}>
                           {(sub.detailed_steps || []).length > 0 && (
@@ -1218,7 +1218,7 @@ const App = () => {
                   <button onClick={() => setShowDownloadConfirm('reports')} className="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-blue-700 shadow-sm active:scale-95 flex items-center justify-center gap-2 transition-all"><FileDown size={14} /> โหลดทั้งหมด</button>
                 </div>
               </div>
-              
+
               <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-100 pb-6">
                 {/* ซ่อนปุ่ม 04-02 ถึง 04-04 เพราะไม่มีข้อมูลรายวิชาแล้ว แต่ยังมีอยู่เผื่อการโหลดไฟล์เก่าที่มีข้อมูลรายวิชา */}
                 {subjects.length > 0 && subjects.filter(s => s.isAnalyzed).length > 0 && (
@@ -1467,6 +1467,7 @@ const App = () => {
                       </div>
                       <div className="report-header font-serif text-[11pt] space-y-1.5 mb-6">
                         <h2 className="text-center font-bold text-[16pt] mb-2 uppercase font-serif">การวิเคราะห์งานในสถานประกอบการ</h2>
+                        <h3 className="text-center font-bold text-[14pt] mb-6">สถานประกอบการ {config.companyName || '................................................'}</h3>
                         <h3 className="text-center font-bold text-[14pt]">สถานประกอบการ {config.companyName || '................................................'}</h3>
                         <h3 className="text-center font-bold text-[14pt] mb-6">ชื่อครูฝึกในสถานประกอบการ {config.trainerName || '................................................'}</h3>
                       </div>
@@ -2150,5 +2151,3 @@ const App = () => {
     </div>
   );
 };
-
-export default App;
