@@ -384,8 +384,12 @@ const App = () => {
 
   const updateWorkplaceSubtask = (mIdx, sIdx, field, value) => {
     setWorkplaceMainTasks(prev => {
-      const next = [...prev];
-      next[mIdx].subTasks[sIdx][field] = value;
+      const next = prev.map(t => ({ ...t, subTasks: [...(t.subTasks || [])] }));
+      if (sIdx === null) {
+        next[mIdx][field] = value;
+      } else {
+        next[mIdx].subTasks[sIdx] = { ...next[mIdx].subTasks[sIdx], [field]: value };
+      }
       return next;
     });
   };
