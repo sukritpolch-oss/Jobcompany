@@ -1467,7 +1467,8 @@ const App = () => {
                       </div>
                       <div className="report-header font-serif text-[11pt] space-y-1.5 mb-6">
                         <h2 className="text-center font-bold text-[16pt] mb-2 uppercase font-serif">การวิเคราะห์งานในสถานประกอบการ</h2>
-                        <h3 className="text-center font-bold text-[14pt] mb-6">สถานประกอบการ {config.companyName || '................................................'}</h3>
+                        <h3 className="text-center font-bold text-[14pt]">สถานประกอบการ {config.companyName || '................................................'}</h3>
+                        <h3 className="text-center font-bold text-[14pt] mb-6">ชื่อครูฝึกในสถานประกอบการ {config.trainerName || '................................................'}</h3>
                       </div>
                       <div className="font-bold text-[12pt] mb-3 font-serif">๑. รายการงานที่จัดฝึกปฏิบัติในสถานประกอบการ</div>
                       <table className="w-full border-collapse border-2 border-black mb-8 text-[11pt] font-serif">
