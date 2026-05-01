@@ -96,9 +96,7 @@ const App = () => {
         selectedBehaviors
       });
 
-      // เข้ารหัสแบบพื้นฐาน
-      const encodedData = btoa(unescape(encodeURIComponent(payload)));
-      const blob = new Blob([encodedData], { type: 'text/plain' });
+      const blob = new Blob([payload], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -142,22 +140,28 @@ const App = () => {
     reader.onload = (event) => {
       const rawText = event.target.result.trim();
 
+      // 1) ไฟล์ใหม่: plain JSON UTF-8
       try {
         const parsed = JSON.parse(rawText);
-        if (applyParsed(parsed)) showStatus('โหลดและกู้คืนข้อมูลสำเร็จ!');
-        resetInputs();
-        return;
+        if (applyParsed(parsed)) { showStatus('โหลดและกู้คืนข้อมูลสำเร็จ!'); resetInputs(); return; }
       } catch (_) {}
 
+      // 2) ไฟล์เก่า: base64 + TextDecoder (รองรับ Unicode/ภาษาไทย)
+      try {
+        const binaryStr = atob(rawText);
+        const bytes = Uint8Array.from(binaryStr, c => c.charCodeAt(0));
+        const decoded = new TextDecoder('utf-8').decode(bytes);
+        const parsed = JSON.parse(decoded);
+        if (applyParsed(parsed)) { showStatus('โหลดและกู้คืนข้อมูลสำเร็จ!'); resetInputs(); return; }
+      } catch (_) {}
+
+      // 3) fallback ไฟล์เก่ามากที่ใช้ escape/unescape
       try {
         const decoded = decodeURIComponent(escape(atob(rawText)));
         const parsed = JSON.parse(decoded);
-        if (applyParsed(parsed)) showStatus('โหลดและกู้คืนข้อมูลสำเร็จ!');
-        resetInputs();
-        return;
+        if (applyParsed(parsed)) { showStatus('โหลดและกู้คืนข้อมูลสำเร็จ!'); resetInputs(); return; }
       } catch (_) {}
 
-      // Fallback
       showStatus('เปิดไฟล์ไม่สำเร็จ: ไฟล์เสียหายหรือไม่รองรับรูปแบบนี้');
       resetInputs();
     };
