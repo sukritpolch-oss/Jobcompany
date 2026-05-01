@@ -1019,6 +1019,23 @@ const App = () => {
         {/* WORKPLACE TAB (Job Analysis Dashboard) */}
         {activeTab === 'workplace' && (
           <div className="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+            {/* Info Header */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-sm text-slate-700 space-y-1.5">
+              <p className="text-base font-bold text-slate-800">การวิเคราะห์งานในสถานประกอบการ</p>
+              <p>
+                สถานประกอบการ&nbsp;
+                <span className="border-b border-dotted border-slate-400 pb-0.5 min-w-[200px] inline-block">
+                  {config.companyName || <span className="text-slate-300">........................................</span>}
+                </span>
+              </p>
+              <p>
+                ชื่อครูฝึกในสถานประกอบการ&nbsp;
+                <span className="border-b border-dotted border-slate-400 pb-0.5 min-w-[200px] inline-block">
+                  {config.trainerName || <span className="text-slate-300">........................................</span>}
+                </span>
+              </p>
+            </div>
+
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <div>
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -1057,7 +1074,7 @@ const App = () => {
                         disabled={main.isAnalyzing || !main.name || main.isConfirmed} 
                         className="flex-1 md:flex-none py-2 px-4 bg-slate-800 text-white rounded-md text-xs font-medium hover:bg-slate-900 transition flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:text-slate-500"
                       >
-                        {main.isAnalyzing ? <Loader2 className="animate-spin" size={14} /> : <Wand2 size={14} />} {main.isAnalyzing ? 'กำลังวิเคราะห์...' : 'AI ช่วยแตกงานย่อย'}
+                        {main.isAnalyzing ? <Loader2 className="animate-spin" size={14} /> : <Wand2 size={14} />} {main.isAnalyzing ? 'กำลังวิเคราะห์...' : 'วิเคราะห์งานย่อยและขั้นตอน'}
                       </button>
                       {!main.isConfirmed && (
                         <button onClick={() => removeWorkplaceMainTask(main.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"><Trash2 size={18} /></button>
@@ -1086,7 +1103,7 @@ const App = () => {
                               readOnly={main.isConfirmed}
                             />
                             {!main.isConfirmed && (
-                              <button type="button" onClick={() => analyzeSingleWorkplaceSubtask(mIdx, sIdx)} disabled={sub.isAnalyzing || !sub.workplaceName} className="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-1.5 rounded disabled:bg-slate-50 disabled:text-slate-300 transition" title="ให้ AI วิเคราะห์ขั้นตอน">
+                              <button type="button" onClick={() => analyzeSingleWorkplaceSubtask(mIdx, sIdx)} disabled={sub.isAnalyzing || !sub.workplaceName} className="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-1.5 rounded disabled:bg-slate-50 disabled:text-slate-300 transition" title="ให้ระบบวิเคราะห์ขั้นตอน">
                                 {sub.isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
                               </button>
                             )}
@@ -1450,7 +1467,8 @@ const App = () => {
                       </div>
                       <div className="report-header font-serif text-[11pt] space-y-1.5 mb-6">
                         <h2 className="text-center font-bold text-[16pt] mb-2 uppercase font-serif">การวิเคราะห์งานในสถานประกอบการ</h2>
-                        <h3 className="text-center font-bold text-[14pt] mb-6">สถานประกอบการ {config.companyName || '................................................'}</h3>
+                        <h3 className="text-center font-bold text-[14pt]">สถานประกอบการ {config.companyName || '................................................'}</h3>
+                        <h3 className="text-center font-bold text-[14pt] mb-6">ชื่อครูฝึกในสถานประกอบการ {config.trainerName || '................................................'}</h3>
                       </div>
                       <div className="font-bold text-[12pt] mb-3 font-serif">๑. รายการงานที่จัดฝึกปฏิบัติในสถานประกอบการ</div>
                       <table className="w-full border-collapse border-2 border-black mb-8 text-[11pt] font-serif">
