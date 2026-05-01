@@ -1467,7 +1467,10 @@ const App = () => {
                       </div>
                       <div className="report-header font-serif text-[11pt] space-y-1.5 mb-6">
                         <h2 className="text-center font-bold text-[16pt] mb-2 uppercase font-serif">การวิเคราะห์งานในสถานประกอบการ</h2>
+<<<<<<< HEAD
                         <h3 className="text-center font-bold text-[14pt] mb-6">สถานประกอบการ {config.companyName || '................................................'}</h3>
+=======
+>>>>>>> 38dd73a36d3b39526bf9f39ec0beaf50581da6cd
                         <h3 className="text-center font-bold text-[14pt]">สถานประกอบการ {config.companyName || '................................................'}</h3>
                         <h3 className="text-center font-bold text-[14pt] mb-6">ชื่อครูฝึกในสถานประกอบการ {config.trainerName || '................................................'}</h3>
                       </div>
