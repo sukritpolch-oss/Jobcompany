@@ -631,7 +631,7 @@ const App = () => {
       {/* แถบชื่อระบบ */}
       <div className="bg-indigo-700 text-white py-3 px-4 text-center text-base md:text-lg font-black shadow-md font-serif z-[70] relative flex items-center justify-center gap-2">
         <ClipboardCheck size={22} className="shrink-0" />
-        <span>ระบบจัดทำแผนฝึกอาชีพ(ทวิภาคี) - ฉบับปรับปรุง (วิเคราะห์สถานประกอบการ)</span>
+        <span>ระบบวิเคราะห์งานในสถานประกอบการ</span>
       </div>
 
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 h-16 flex items-center justify-between px-4 md:px-6 shadow-sm">
