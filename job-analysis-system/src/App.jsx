@@ -1466,13 +1466,8 @@ const App = () => {
                         <span className="border border-black p-1 font-bold">DVE-04-05 (ฝอ.1)</span>
                       </div>
                       <div className="report-header font-serif text-[11pt] space-y-1.5 mb-6">
-                        <h2 className="text-center font-bold text-[16pt] mb-2 uppercase font-serif">การวิเคราะห์งานในสถานประกอบการ</h2>
-<<<<<<< HEAD
-                        <h3 className="text-center font-bold text-[14pt] mb-6">สถานประกอบการ {config.companyName || '................................................'}</h3>
-=======
->>>>>>> 38dd73a36d3b39526bf9f39ec0beaf50581da6cd
-                        <h3 className="text-center font-bold text-[14pt]">สถานประกอบการ {config.companyName || '................................................'}</h3>
-                        <h3 className="text-center font-bold text-[14pt] mb-6">ชื่อครูฝึกในสถานประกอบการ {config.trainerName || '................................................'}</h3>
+                        <h2 className="text-center font-bold text-[16pt] mb-2 uppercase font-serif">... (โค้ดเดิมของคุณ) ...</h2>
+                        <h3 className="text-center font-bold text-[14pt] mb-6">สถานประกอบการ {companyName}</h3>
                       </div>
                       <div className="font-bold text-[12pt] mb-3 font-serif">๑. รายการงานที่จัดฝึกปฏิบัติในสถานประกอบการ</div>
                       <table className="w-full border-collapse border-2 border-black mb-8 text-[11pt] font-serif">
@@ -1516,7 +1511,7 @@ const App = () => {
                             <h2 className="text-center font-black text-[16pt] mb-6 uppercase font-serif">แผนการฝึกอาชีพรายหน่วยสถานประกอบการ {config.companyName || '................................'}</h2>
                             <p>อาชีพ /ตำแหน่งงาน <span className="underline decoration-dotted">{config.occupation || '................................'}</span> ส่วนงาน/จุดที่ฝึกงาน <span className="underline decoration-dotted">{config.department || '................................'}</span></p>
                             <p className="mt-4 font-bold font-serif text-[12pt]">งานหลัก {task.mainTaskIndex}. {cleanTaskName(task.parentMainTaskName) || '................................'}</p>
-                            <p className="font-bold font-serif text-[12pt]">งานย่อย {task.subTaskIndex}. {cleanTaskName(task.workplaceName) || '................................'} <span className="font-normal">(เวลาฝึก: {task.hours} วัน/ชั่วโมง)</span></p>
+                            <p className="font-bold font-serif text-[12pt]">งานย่อย {task.subTaskIndex}. {cleanTaskName(task.workplaceName) || '................................'} <span className="font-normal">(เวลาฝึก: {task.hours} ชั่วโมง)</span></p>
                             <p>ชื่อ-สกุล ครูฝึก <span className="underline decoration-dotted">{config.trainerName || '................................'}</span> ตำแหน่ง <span className="underline decoration-dotted">{config.trainerPosition || '................................'}</span></p>
                           </div>
 
