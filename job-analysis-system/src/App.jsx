@@ -1019,6 +1019,23 @@ const App = () => {
         {/* WORKPLACE TAB (Job Analysis Dashboard) */}
         {activeTab === 'workplace' && (
           <div className="max-w-6xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 duration-300">
+            {/* Info Header */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm text-sm text-slate-700 space-y-1.5">
+              <p className="text-base font-bold text-slate-800">การวิเคราะห์งานในสถานประกอบการ</p>
+              <p>
+                สถานประกอบการ&nbsp;
+                <span className="border-b border-dotted border-slate-400 pb-0.5 min-w-[200px] inline-block">
+                  {config.companyName || <span className="text-slate-300">........................................</span>}
+                </span>
+              </p>
+              <p>
+                ชื่อครูฝึกในสถานประกอบการ&nbsp;
+                <span className="border-b border-dotted border-slate-400 pb-0.5 min-w-[200px] inline-block">
+                  {config.trainerName || <span className="text-slate-300">........................................</span>}
+                </span>
+              </p>
+            </div>
+
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
               <div>
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
