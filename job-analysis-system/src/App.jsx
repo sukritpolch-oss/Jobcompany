@@ -112,7 +112,20 @@ const App = () => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `DVE_Workplace_Backup_${new Date().getTime()}.jobcompany`;
+      
+      // สร้างชื่อไฟล์จาก Company + Department + TrainerName
+      let filenameParts = [];
+      if (config.companyName && config.companyName.trim() !== '') filenameParts.push(config.companyName.trim());
+      if (config.department && config.department.trim() !== '') filenameParts.push(config.department.trim());
+      if (config.trainerName && config.trainerName.trim() !== '') filenameParts.push(config.trainerName.trim());
+
+      let filename = `DVE_Workplace_Backup_${new Date().getTime()}.jobcompany`; // Default name
+      if (filenameParts.length > 0) {
+          // เชื่อมด้วย underscore และลบอักขระที่ห้ามใช้ในการตั้งชื่อไฟล์ออก
+          filename = filenameParts.join('_').replace(/[/\\?%*:|"<>]/g, '-') + '.jobcompany';
+      }
+
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -614,15 +627,12 @@ const App = () => {
     { k: 'collegeName', l: 'ชื่อวิทยาลัย', i: Building2 },
     { k: 'companyName', l: 'ชื่อสถานประกอบการ', i: Briefcase },
     { k: 'level', l: 'ระดับชั้น (ปวช./ปวส./ปริญญาตรี)', i: User },
-    { k: 'fieldOfStudy', l: 'แผนกวิชา', i: User },
-    { k: 'group', l: 'กลุ่มอาชีพ', i: User },
-    { k: 'major', l: 'สาขาวิชา', i: User },
     { k: 'academicYear', l: 'ปีการศึกษา', i: Calendar },
     { k: 'startDate', l: 'วันเริ่มฝึก (ฝอ.1)', i: Clock },
     { k: 'endDate', l: 'วันสิ้นสุดฝึก (ฝอ.1)', i: Clock },
     { k: 'trainerName', l: 'ชื่อ-สกุล ครูฝึก', i: User },
     { k: 'trainerPosition', l: 'ตำแหน่งครูฝึก', i: Briefcase },
-    { k: 'occupation', l: 'อาชีพ / ตำแหน่งงาน', i: HardHat },
+    { k: 'occupation', l: 'อาชีพ / ตำแหน่งงานที่ฝึก', i: HardHat },
     { k: 'department', l: 'ส่วนงาน / จุดฝึก', i: Building2 }
   ];
 
@@ -1016,13 +1026,13 @@ const App = () => {
                     <div className="report-header font-serif text-[11pt] space-y-1.5">
                       <h2 className="text-center font-bold underline uppercase mb-6 font-serif">แผนการฝึกอาชีพตลอดหลักสูตรร่วมกับ {config.companyName || '................'}</h2>
                       <p>ผู้เข้ารับการฝึกระบบทวิภาคี วิทยาลัย {config.collegeName || '................'} ระดับชั้น {config.level || '................'} กลุ่มอาชีพ {config.group || '................'} สาขาวิชา {config.major || '................'}</p>
-                      <p>ฝึกงานปีการศึกษา {config.academicYear || '.........'} ระหว่างวันที่ {config.startDate || '.........'} ถึง วันที่ {config.endDate || '.........'} เวลาฝึก {totalTrainingHours} วัน/ชั่วโมง</p>
+                      <p>ฝึกงานปีการศึกษา {config.academicYear || '.........'} ระหว่างวันที่ {config.startDate || '.........'} ถึง วันที่ {config.endDate || '.........'} เวลาฝึก {(Number(config.daysPerWeek) || 0) * (Number(config.weeks) || 0)} วัน {totalTrainingHours} ชั่วโมง</p>
                     </div>
                     <div className="font-bold text-[12pt] mb-3 uppercase underline font-serif">๑. รายการงานที่จัดฝึกปฏิบัติจริง</div>
                     <table className="w-full border-collapse border-2 border-black mb-8 text-[10pt] font-serif">
                       <thead>
                         <tr className="bg-slate-50 font-bold text-center font-serif">
-                          <th className="border border-black p-2">อาชีพ / ตำแหน่งงาน</th>
+                          <th className="border border-black p-2">อาชีพ / ตำแหน่งงานที่ฝึก</th>
                           <th className="border border-black p-2">งานหลักในสถานประกอบการ</th>
                           <th className="border border-black p-2">งานย่อยในสถานประกอบการ</th>
                           <th className="border border-black p-2">ชื่อ-สกุล ครูฝึก</th>
@@ -1055,7 +1065,7 @@ const App = () => {
                           <h2 className="text-center font-black text-[14pt] underline mb-6 uppercase font-serif">แผนการฝึกอาชีพรายหน่วยสถานประกอบการ {config.companyName || '................'}</h2>
                           <p>ผู้เข้ารับการฝึกระบบทวิภาคี วิทยาลัย {config.collegeName || '................'} ระดับชั้น {config.level || '................'} กลุ่มอาชีพ {config.group || '................'}</p>
                           <p>สาขาวิชา {config.major || '................'}</p>
-                          <p>อาชีพ /ตำแหน่งงาน {config.occupation || '................'} ส่วนงาน/จุดที่ฝึกงาน {config.department || '................'}</p>
+                          <p>อาชีพ / ตำแหน่งงานที่ฝึก {config.occupation || '................'} ส่วนงาน/จุดที่ฝึกงาน {config.department || '................'}</p>
                           <p className="mt-2 font-bold font-serif">งานหลัก {task.mainTaskIndex}. {cleanTaskName(task.parentMainTaskName) || '................'}</p>
                           <p className="font-bold text-indigo-700 font-serif">งานย่อย {task.subTaskIndex}. {cleanTaskName(task.workplaceName) || '................'} เวลาฝึก: {task.hours} วัน/ชั่วโมง</p>
                           <p>ชื่อ-สกุล ครูฝึก {config.trainerName || '................'} ตำแหน่ง {config.trainerPosition || '................'}</p>
