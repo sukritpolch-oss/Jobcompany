@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   Plus, Trash2, FileText,
   ClipboardCheck, Building2, User,
@@ -7,8 +7,25 @@ import {
   Upload, Loader2, X, FileDown,
   Wand2, HardHat, Briefcase,
   RotateCcw, Sparkles, Calendar,
-  Key, Save, CheckCircle2
+  Key, Save, CheckCircle2, Cloud, Search, Filter, UploadCloud, MapPin, DownloadCloud
 } from 'lucide-react';
+
+// --- Firebase Imports ---
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+
+// --- Firebase Setup ---
+let app, auth, db, appId;
+try {
+  const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+} catch (e) {
+  console.error("Firebase init error", e);
+}
 
 const apiKey = "";
 const FILE_SECRET_KEY = "@Sukritpol2528"; 
@@ -18,7 +35,24 @@ const BEHAVIOR_OPTIONS = [
   'ขยันและอดทน', 'ประหยัด', 'ความปลอดภัย', 'ความคิดสร้างสรรค์', 'ทำงานเป็นทีม', 'จิตสาธารณะ'
 ];
 
+const PROVINCES = [
+  "กรุงเทพมหานคร", "กระบี่", "กาญจนบุรี", "กาฬสินธุ์", "กำแพงเพชร", "ขอนแก่น", "จันทบุรี", "ฉะเชิงเทรา", "ชลบุรี", "ชัยนาท", 
+  "ชัยภูมิ", "ชุมพร", "เชียงราย", "เชียงใหม่", "ตรัง", "ตราด", "ตาก", "นครนายก", "นครปฐม", "นครพนม", "นครราชสีมา", 
+  "นครศรีธรรมราช", "นครสวรรค์", "นนทบุรี", "นราธิวาส", "น่าน", "บึงกาฬ", "บุรีรัมย์", "ปทุมธานี", "ประจวบคีรีขันธ์", 
+  "ปราจีนบุรี", "ปัตตานี", "พระนครศรีอยุธยา", "พะเยา", "พังงา", "พัทลุง", "พิจิตร", "พิษณุโลก", "เพชรบุรี", "เพชรบูรณ์", 
+  "แพร่", "ภูเก็ต", "มหาสารคาม", "มุกดาหาร", "แม่ฮ่องสอน", "ยโสธร", "ยะลา", "ร้อยเอ็ด", "ระนอง", "ระยอง", "ราชบุรี", 
+  "ลพบุรี", "ลำปาง", "ลำพูน", "เลย", "ศรีสะเกษ", "สกลนคร", "สงขลา", "สตูล", "สมุทรปราการ", "สมุทรสงคราม", 
+  "สมุทรสาคร", "สระแก้ว", "สระบุรี", "สิงห์บุรี", "สุโขทัย", "สุพรรณบุรี", "สุราษฎร์ธานี", "สุรินทร์", "หนองคาย", 
+  "หนองบัวลำภู", "อ่างทอง", "อำนาจเจริญ", "อุดรธานี", "อุตรดิตถ์", "อุทัยธานี", "อุบลราชธานี"
+];
+
 const App = () => {
+  // Cloud & Auth States
+  const [authUser, setAuthUser] = useState(null);
+  const [cloudData, setCloudData] = useState([]);
+  const [filterProvince, setFilterProvince] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
   // ระบบบันทึกงานและดาวน์โหลด
   const [showDownloadConfirm, setShowDownloadConfirm] = useState(null);
   const fileInputRef = useRef(null);
@@ -35,6 +69,11 @@ const App = () => {
   const [collapsedWorkplaceTasks, setCollapsedWorkplaceTasks] = useState(new Set());
   const [collapsedWorkplaceSubTasks, setCollapsedWorkplaceSubTasks] = useState(new Set());
   const [statusMessage, setStatusMessage] = useState(null);
+  
+  // สถานะสำหรับการจัดการลบข้อมูลคลาวด์
+  const [deleteModalItem, setDeleteModalItem] = useState(null);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
 
   // ข้อมูลพื้นฐานสำหรับรายงาน
   const [config, setConfig] = useState({
@@ -45,6 +84,7 @@ const App = () => {
     deepseekApiKey: '',
     collegeName: '',
     companyName: '',
+    province: '', // เพิ่มฟิลด์จังหวัด
     level: 'ปวช.',
     academicYear: '๒๕๖๙',
     startDate: '',
@@ -54,13 +94,45 @@ const App = () => {
     weeks: 18,
     trainerName: '',
     trainerPosition: '',
-    occupation: '',
-    department: ''
+    occupation: ''
   });
 
   const [workplaceMainTasks, setWorkplaceMainTasks] = useState([
     { id: Date.now(), name: '', isAnalyzing: false, isConfirmed: false, subTasks: [] }
   ]);
+
+  // --- Firebase Effects ---
+  useEffect(() => {
+    if (!auth) return;
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth error:", err);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setAuthUser);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!authUser || !db) return;
+    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'workplace_plans');
+    const unsubscribe = onSnapshot(colRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort newest first in memory
+      data.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+      setCloudData(data);
+    }, (err) => {
+      console.error("Fetch cloud data error:", err);
+    });
+    return () => unsubscribe();
+  }, [authUser]);
 
   const cleanTaskName = (name) => {
     if (!name) return '';
@@ -77,7 +149,7 @@ const App = () => {
     );
   };
 
-  // --- Local Data Save/Load Functions (Encrypted) ---
+  // --- Data Save/Load Functions ---
   const encryptPayload = (text) => {
     let result = '';
     for (let i = 0; i < text.length; i++) {
@@ -95,60 +167,74 @@ const App = () => {
     return result;
   };
 
+  const generateFileName = (conf) => {
+    let filenameParts = [];
+    if (conf.companyName && conf.companyName.trim() !== '') filenameParts.push(conf.companyName.trim());
+    if (conf.trainerName && conf.trainerName.trim() !== '') filenameParts.push(conf.trainerName.trim());
+
+    let filename = `DVE_Workplace_${new Date().getTime()}.jobcompany`;
+    if (filenameParts.length > 0) {
+        filename = filenameParts.join('_').replace(/[/\\?%*:|"<>]/g, '-') + '.jobcompany';
+    }
+    return filename;
+  }
+
   const saveDataLocally = () => {
     showStatus('กำลังบันทึกข้อมูลลงเครื่อง...');
     try {
-      const payload = JSON.stringify({
-        config,
-        workplaceMainTasks,
-        selectedBehaviors
-      });
-
+      const payload = JSON.stringify({ config, workplaceMainTasks, selectedBehaviors });
       const encryptedData = encryptPayload(payload);
-      // เปลี่ยน type เป็น application/octet-stream เพื่อบังคับให้มือถือ (iOS/Android) ดาวน์โหลดไฟล์แทนการเปิดอ่านบนเบราว์เซอร์
       const blob = new Blob([encryptedData], { type: 'application/octet-stream' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.style.display = 'none'; // ซ่อน element เพื่อความสวยงามในมือถือ
+      link.style.display = 'none';
       link.href = url;
-      
-      // สร้างชื่อไฟล์จาก Company + Department + TrainerName
-      let filenameParts = [];
-      if (config.companyName && config.companyName.trim() !== '') filenameParts.push(config.companyName.trim());
-      if (config.department && config.department.trim() !== '') filenameParts.push(config.department.trim());
-      if (config.trainerName && config.trainerName.trim() !== '') filenameParts.push(config.trainerName.trim());
-
-      let filename = `DVE_Workplace_Backup_${new Date().getTime()}.jobcompany`; // Default name
-      if (filenameParts.length > 0) {
-          // เชื่อมด้วย underscore และลบอักขระที่ห้ามใช้ในการตั้งชื่อไฟล์ออก
-          filename = filenameParts.join('_').replace(/[/\\?%*:|"<>]/g, '-') + '.jobcompany';
-      }
-
-      link.download = filename;
+      link.download = generateFileName(config);
       document.body.appendChild(link);
       link.click();
-      
-      // หน่วงเวลาเล็กน้อยให้มือถือประมวลผลทันก่อนลบ Object URL
-      setTimeout(() => {
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      }, 100);
-
+      setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); }, 100);
       showStatus('บันทึกข้อมูลลงเครื่องสำเร็จ!');
     } catch (err) {
-      console.error("Save local error:", err);
+      console.error(err);
       showStatus('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+    }
+  };
+
+  const downloadCloudItemAsFile = (item) => {
+    showStatus(`กำลังดาวน์โหลดข้อมูลของ ${item.companyName}...`);
+    try {
+      const payload = JSON.stringify({ config: item.config, workplaceMainTasks: item.workplaceMainTasks, selectedBehaviors: item.selectedBehaviors });
+      const encryptedData = encryptPayload(payload);
+      const blob = new Blob([encryptedData], { type: 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.style.display = 'none';
+      link.href = url;
+      link.download = generateFileName(item.config);
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => { document.body.removeChild(link); window.URL.revokeObjectURL(url); }, 100);
+      showStatus('ดาวน์โหลดไฟล์สำเร็จ!');
+    } catch (err) {
+      console.error(err);
+      showStatus('เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์');
+    }
+  };
+
+  const loadFromCloudItem = (item) => {
+    if (window.confirm('คำเตือน: การนำเข้าข้อมูลจากคลาวด์จะทับข้อมูลปัจจุบันของคุณที่กำลังทำอยู่ทั้งหมด ต้องการดำเนินการต่อหรือไม่?')) {
+      setConfig(item.config || config);
+      setWorkplaceMainTasks(item.workplaceMainTasks || []);
+      setSelectedBehaviors(item.selectedBehaviors || BEHAVIOR_OPTIONS);
+      showStatus('นำเข้าข้อมูลจากคลังกลางสำเร็จ!');
+      setActiveTab('workplace');
     }
   };
 
   const handleFileUploadLocal = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    const resetInputs = () => {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      if (evalFileInputRef.current) evalFileInputRef.current.value = '';
-    };
+    const resetInputs = () => { if (fileInputRef.current) fileInputRef.current.value = ''; };
 
     const applyParsed = (parsed) => {
       if (!parsed || typeof parsed !== 'object' || (!parsed.config && !parsed.workplaceMainTasks)) {
@@ -165,36 +251,77 @@ const App = () => {
     reader.onload = (event) => {
       const rawText = event.target.result.trim();
       try {
-        const parsed = JSON.parse(rawText);
-        if (applyParsed(parsed)) showStatus('โหลดและกู้คืนข้อมูลสำเร็จ!');
-        resetInputs();
-        return;
+        if (applyParsed(JSON.parse(rawText))) { showStatus('โหลดข้อมูลสำเร็จ!'); resetInputs(); return; }
       } catch (_) {}
-
       try {
-        const decryptedData = decryptPayload(rawText);
-        const parsed = JSON.parse(decryptedData);
-        if (applyParsed(parsed)) showStatus('โหลดและกู้คืนข้อมูลสำเร็จ!');
-        resetInputs();
-        return;
+        if (applyParsed(JSON.parse(decryptPayload(rawText)))) { showStatus('โหลดข้อมูลสำเร็จ!'); resetInputs(); return; }
       } catch (_) {}
-
       try {
-        const decoded = atob(rawText);
-        const parsed = JSON.parse(decoded);
-        if (applyParsed(parsed)) showStatus('โหลดและกู้คืนข้อมูลสำเร็จ!');
-        resetInputs();
-        return;
+        if (applyParsed(JSON.parse(atob(rawText)))) { showStatus('โหลดข้อมูลสำเร็จ!'); resetInputs(); return; }
       } catch (_) {}
-
       showStatus('เปิดไฟล์ไม่สำเร็จ: ไฟล์เสียหายหรือไม่รองรับรูปแบบนี้');
       resetInputs();
     };
-    reader.onerror = () => {
-      showStatus('เปิดไฟล์ไม่สำเร็จ: ไม่สามารถอ่านไฟล์ได้');
-      resetInputs();
-    };
+    reader.onerror = () => { showStatus('เปิดไฟล์ไม่สำเร็จ: ไม่สามารถอ่านไฟล์ได้'); resetInputs(); };
     reader.readAsText(file, 'UTF-8');
+  };
+
+  const shareToCloud = async () => {
+    if (!authUser || !db) return showStatus("ระบบคลาวด์ยังไม่พร้อมใช้งาน");
+    if (!config.companyName?.trim()) return showStatus("กรุณาระบุชื่อสถานประกอบการก่อนแชร์");
+    if (!config.province?.trim()) return showStatus("กรุณาระบุจังหวัดของสถานประกอบการ");
+    if (!config.trainerName?.trim()) return showStatus("กรุณาระบุชื่อ-สกุล ครูฝึก (ระบบจะใช้เป็นชื่อผู้แชร์)");
+
+    showStatus("กำลังอัปโหลดไปยังคลังข้อมูลกลาง...");
+    try {
+      const payload = {
+        config,
+        workplaceMainTasks,
+        selectedBehaviors,
+        companyName: config.companyName,
+        province: config.province,
+        creatorName: config.trainerName,
+        level: config.level,
+        createdAt: serverTimestamp(),
+        uid: authUser.uid
+      };
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workplace_plans'), payload);
+      showStatus("อัปโหลดและแชร์ข้อมูลเข้าสู่คลังกลางสำเร็จ!");
+      setActiveTab('cloud');
+    } catch (err) {
+      console.error(err);
+      showStatus("เกิดข้อผิดพลาดในการอัปโหลดไปยังคลาวด์");
+    }
+  };
+
+  const handleAdminDelete = async () => {
+    if (adminPassword !== FILE_SECRET_KEY) {
+      return showStatus('รหัสผ่านแอดมินไม่ถูกต้อง!');
+    }
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workplace_plans', deleteModalItem.id));
+      showStatus('ลบข้อมูลสำเร็จ (Admin)');
+      setDeleteModalItem(null);
+      setAdminPassword('');
+    } catch (e) {
+      showStatus('เกิดข้อผิดพลาดในการลบข้อมูล');
+    }
+  };
+
+  const handleRequestDelete = async () => {
+    if (!deleteReason.trim()) {
+      return showStatus('กรุณาระบุเหตุผลที่ต้องการแจ้งลบ');
+    }
+    try {
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workplace_plans', deleteModalItem.id), {
+        deleteRequest: deleteReason
+      });
+      showStatus('ส่งคำร้องขอลบสำเร็จ แอดมินจะดำเนินการตรวจสอบครับ');
+      setDeleteModalItem(null);
+      setDeleteReason('');
+    } catch (e) {
+      showStatus('เกิดข้อผิดพลาดในการแจ้งลบ');
+    }
   };
 
   const showStatus = useCallback((msg) => {
@@ -629,18 +756,17 @@ const App = () => {
   const setupFields = [
     { k: 'collegeName', l: 'ชื่อวิทยาลัย', i: Building2 },
     { k: 'companyName', l: 'ชื่อสถานประกอบการ', i: Briefcase },
-    { k: 'level', l: 'ระดับชั้น (ปวช./ปวส./ปริญญาตรี)', i: User },
+    { k: 'level', l: 'ระดับชั้น', i: User },
     { k: 'academicYear', l: 'ปีการศึกษา', i: Calendar },
     { k: 'startDate', l: 'วันเริ่มฝึก (ฝอ.1)', i: Clock },
     { k: 'endDate', l: 'วันสิ้นสุดฝึก (ฝอ.1)', i: Clock },
     { k: 'trainerName', l: 'ชื่อ-สกุล ครูฝึก', i: User },
     { k: 'trainerPosition', l: 'ตำแหน่งครูฝึก', i: Briefcase },
-    { k: 'occupation', l: 'อาชีพ / ตำแหน่งงานที่ฝึก', i: HardHat },
-    { k: 'department', l: 'ส่วนงาน / จุดฝึก', i: Building2 }
+    { k: 'occupation', l: 'อาชีพ / ตำแหน่งงานที่ฝึก', i: HardHat }
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20 font-serif">
+    <div className={`min-h-screen font-sans text-slate-900 pb-20 font-serif transition-colors duration-500 ${activeTab === 'cloud' ? 'bg-slate-800' : 'bg-slate-50'}`}>
       {/* แถบชื่อระบบ */}
       <div className="bg-indigo-700 text-white py-3 px-4 text-center text-base md:text-lg font-black shadow-md font-serif z-[70] relative flex items-center justify-center gap-2">
         <ClipboardCheck size={22} className="shrink-0" />
@@ -652,12 +778,14 @@ const App = () => {
         <div className="hidden lg:flex gap-1 bg-slate-100 p-1.5 rounded-2xl">
           {[
             { id: 'setup', l: '๑. ตั้งค่า', i: Settings },
-            { id: 'workplace', l: '๒. วิเคราะห์งานสถานประกอบการ', i: Building2 },
+            { id: 'workplace', l: '๒. วิเคราะห์งาน', i: Building2 },
             { id: 'reports', l: '๓. แสดงรายงาน', i: FileText },
             { id: 'evaluation', l: '๔. แบบประเมิน', i: ClipboardCheck },
+            { id: 'share', l: '๕. แชร์คลังแผนฝึก', i: UploadCloud },
+            { id: 'cloud', l: '๖. คลังส่วนกลาง', i: Cloud },
           ].map(t => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)} className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${activeTab === t.id ? 'bg-white text-indigo-600 shadow-sm scale-105' : 'text-slate-500 hover:text-indigo-600'}`}>
-              <t.i size={16} className="inline mr-2" /> {t.l}
+            <button key={t.id} onClick={() => setActiveTab(t.id)} className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === t.id ? 'bg-white text-indigo-600 shadow-sm scale-105' : 'text-slate-500 hover:text-indigo-600'}`}>
+              <t.i size={16} /> {t.l}
             </button>
           ))}
         </div>
@@ -665,7 +793,7 @@ const App = () => {
         <div className="flex items-center gap-1 md:gap-2 ml-auto">
           <div className="flex items-center gap-2">
             <input type="file" accept=".jobcompany" ref={fileInputRef} onChange={handleFileUploadLocal} className="hidden" />
-            <button onClick={() => fileInputRef.current.click()} className="p-2 text-emerald-600 hover:text-white hover:bg-emerald-600 transition duration-300 flex items-center gap-1 text-xs font-bold bg-emerald-50 rounded-full px-3 md:px-4 border border-emerald-100" title="อัปโหลดไฟล์งานเดิม">
+            <button onClick={() => fileInputRef.current.click()} className="p-2 text-emerald-600 hover:text-white hover:bg-emerald-600 transition duration-300 flex items-center gap-1 text-xs font-bold bg-emerald-50 rounded-full px-3 md:px-4 border border-emerald-100" title="อัปโหลดไฟล์งานเดิมจากเครื่อง">
               <Upload size={16} />
               <span className="hidden md:inline">โหลดงาน</span>
             </button>
@@ -747,6 +875,63 @@ const App = () => {
         </div>
       )}
 
+      {/* Modal จัดการการลบข้อมูล (สำหรับ Admin / แจ้งลบ) */}
+      {deleteModalItem && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDeleteModalItem(null)}>
+          <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><Trash2 className="text-red-500" /> จัดการลบข้อมูล</h3>
+              <button onClick={() => setDeleteModalItem(null)} className="text-slate-400 hover:text-red-500 transition-colors"><X size={24} /></button>
+            </div>
+            
+            <div className="mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-200 shadow-inner">
+              <p className="font-bold text-sm text-slate-800">แผนฝึก: {deleteModalItem.companyName}</p>
+              <p className="text-xs text-slate-500 mt-1 font-bold">จัดทำโดย: {deleteModalItem.creatorName}</p>
+            </div>
+
+            <div className="space-y-4">
+              {/* ฝั่งแจ้งลบ */}
+              <div className="border border-orange-200 bg-orange-50/50 rounded-2xl p-5">
+                <h4 className="font-bold text-orange-800 text-sm mb-2 flex items-center gap-2"><AlertCircle size={16}/> แจ้งแอดมินลบข้อมูล</h4>
+                <p className="text-xs text-orange-600 mb-3 leading-relaxed">หากพบข้อมูลซ้ำซ้อนหรือไม่เหมาะสม สามารถส่งคำร้องให้ผู้ดูแลระบบดำเนินการลบได้</p>
+                <input 
+                  type="text" 
+                  placeholder="ระบุเหตุผลที่ต้องการแจ้งลบ..." 
+                  className="w-full px-4 py-2.5 text-sm font-bold rounded-xl border border-orange-200 outline-none focus:ring-2 focus:ring-orange-400 mb-3 bg-white" 
+                  value={deleteReason} 
+                  onChange={e => setDeleteReason(e.target.value)} 
+                />
+                <button 
+                  onClick={handleRequestDelete} 
+                  className="w-full py-2.5 bg-orange-500 text-white rounded-xl text-sm font-black shadow-md hover:bg-orange-600 active:scale-95 transition-all"
+                >
+                  ส่งคำแจ้งลบ
+                </button>
+              </div>
+
+              {/* ฝั่งแอดมิน */}
+              <div className="border border-red-200 bg-red-50/50 rounded-2xl p-5">
+                <h4 className="font-bold text-red-800 text-sm mb-2 flex items-center gap-2"><Key size={16}/> สำหรับผู้ดูแลระบบ (Admin)</h4>
+                <p className="text-xs text-red-600 mb-3 leading-relaxed">ใส่รหัสผ่านแอดมินเพื่อลบข้อมูลนี้ออกจากระบบทันที</p>
+                <input 
+                  type="password" 
+                  placeholder="รหัสผ่านแอดมิน..." 
+                  className="w-full px-4 py-2.5 text-sm font-bold rounded-xl border border-red-200 outline-none focus:ring-2 focus:ring-red-400 mb-3 bg-white" 
+                  value={adminPassword} 
+                  onChange={e => setAdminPassword(e.target.value)} 
+                />
+                <button 
+                  onClick={handleAdminDelete} 
+                  className="w-full py-2.5 bg-red-600 text-white rounded-xl text-sm font-black shadow-md hover:bg-red-700 active:scale-95 transition-all"
+                >
+                  ลบข้อมูลทันที (Admin)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* SETUP TAB */}
         {activeTab === 'setup' && (
@@ -797,6 +982,19 @@ const App = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                {/* จังหวัด (เพิ่มฟิลด์เฉพาะสำหรับให้กรองคลาวด์ได้ง่าย) */}
+                <div className="md:col-span-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 font-serif"><MapPin size={12} /> จังหวัดที่ตั้งสถานประกอบการ</label>
+                    <select
+                      className="w-full mt-1 px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition font-bold shadow-inner text-sm font-serif bg-slate-50"
+                      value={config.province || ''}
+                      onChange={e => setConfig({ ...config, province: e.target.value })}
+                    >
+                      <option value="">-- เลือกจังหวัด --</option>
+                      {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                </div>
+                
                 {setupFields.map(f => (
                   <div key={f.k}>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 font-serif"><f.i size={12} /> {f.l}</label>
@@ -808,6 +1006,7 @@ const App = () => {
                       >
                         <option value="ปวช.">ปวช.</option>
                         <option value="ปวส.">ปวส.</option>
+                        <option value="ปวช. และ ปวส.">ปวช. และ ปวส.</option>
                         <option value="ปริญญาตรี">ปริญญาตรี</option>
                       </select>
                     ) : (
@@ -1068,7 +1267,7 @@ const App = () => {
                           <h2 className="text-center font-black text-[14pt] underline mb-6 uppercase font-serif">แผนการฝึกอาชีพรายหน่วยสถานประกอบการ {config.companyName || '................'}</h2>
                           <p>ผู้เข้ารับการฝึกระบบทวิภาคี วิทยาลัย {config.collegeName || '................'} ระดับชั้น {config.level || '................'} กลุ่มอาชีพ {config.group || '................'}</p>
                           <p>สาขาวิชา {config.major || '................'}</p>
-                          <p>อาชีพ / ตำแหน่งงานที่ฝึก {config.occupation || '................'} ส่วนงาน/จุดที่ฝึกงาน {config.department || '................'}</p>
+                          <p>อาชีพ / ตำแหน่งงานที่ฝึก {config.occupation || '................'}</p>
                           <p className="mt-2 font-bold font-serif">งานหลัก {task.mainTaskIndex}. {cleanTaskName(task.parentMainTaskName) || '................'}</p>
                           <p className="font-bold text-indigo-700 font-serif">งานย่อย {task.subTaskIndex}. {cleanTaskName(task.workplaceName) || '................'} เวลาฝึก: {task.hours} วัน/ชั่วโมง</p>
                           <p>ชื่อ-สกุล ครูฝึก {config.trainerName || '................'} ตำแหน่ง {config.trainerPosition || '................'}</p>
@@ -1187,61 +1386,61 @@ const App = () => {
               {activeEvalView === 'eval_workplace' && (
                 <div id="dve-eval-workplace-area" className="font-serif">
                   {workplaceTasksFlat.map((task, idx) => {
-                    const kItems = task.detailed_steps?.map(s => s.objectives?.k).filter(i => i && i.trim() !== '' && i.trim() !== '-') || [];
-                    const sItems = task.detailed_steps?.map(s => s.objectives?.s).filter(i => i && i.trim() !== '' && i.trim() !== '-') || [];
-                    const aItems = task.detailed_steps?.map(s => s.objectives?.a).filter(i => i && i.trim() !== '' && i.trim() !== '-') || [];
-                    const apItems = task.detailed_steps?.map(s => s.objectives?.ap).filter(i => i && i.trim() !== '' && i.trim() !== '-') || [];
+                    const kItems = task.detailed_steps?.map(s => s.objectives?.k).filter(i => i && typeof i === 'string' && i.trim() !== '' && i.trim() !== '-') || [];
+                    const sItems = task.detailed_steps?.map(s => s.objectives?.s).filter(i => i && typeof i === 'string' && i.trim() !== '' && i.trim() !== '-') || [];
+                    const aItems = task.detailed_steps?.map(s => s.objectives?.a).filter(i => i && typeof i === 'string' && i.trim() !== '' && i.trim() !== '-') || [];
+                    const apItems = task.detailed_steps?.map(s => s.objectives?.ap).filter(i => i && typeof i === 'string' && i.trim() !== '' && i.trim() !== '-') || [];
+
+                    let colCount = 4;
+                    if (evalFormType === '5') colCount = 7;
+                    if (evalFormType === '4') colCount = 6;
+                    if (evalFormType === '3') colCount = 5;
 
                     const renderEvalCategoryRows = (title, items) => {
                       if (items.length === 0) return null;
 
-                      let colCount = 4;
-                      if (evalFormType === '5') colCount = 7;
-                      if (evalFormType === '4') colCount = 6;
-                      if (evalFormType === '3') colCount = 5;
-
                       return (
-                        <>
+                        <React.Fragment key={title}>
                           <tr className="bg-slate-50 font-bold">
                             <td colSpan={colCount} className="border border-black p-2 pl-4">{title}</td>
                           </tr>
                           {items.map((item, i) => (
-                            <tr key={i} className="align-top">
+                            <tr key={`${title}-${i}`} className="align-top">
                               <td className="border border-black p-2 pl-4 text-left">{i + 1}. {item}</td>
                               {evalFormType === 'checklist' && (
-                                <>
+                                <React.Fragment>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
-                                </>
+                                </React.Fragment>
                               )}
                               {evalFormType === '5' && (
-                                <>
+                                <React.Fragment>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
-                                </>
+                                </React.Fragment>
                               )}
                               {evalFormType === '4' && (
-                                <>
+                                <React.Fragment>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
-                                </>
+                                </React.Fragment>
                               )}
                               {evalFormType === '3' && (
-                                <>
+                                <React.Fragment>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
                                   <td className="border border-black p-2"></td>
-                                </>
+                                </React.Fragment>
                               )}
                               <td className="border border-black p-2"></td>
                             </tr>
                           ))}
-                        </>
+                        </React.Fragment>
                       );
                     };
 
@@ -1301,6 +1500,21 @@ const App = () => {
                             {renderEvalCategoryRows('ด้านทักษะพิสัย (Skill)', sItems)}
                             {renderEvalCategoryRows('ด้านจิตพิสัย (Attitude)', aItems)}
                             {renderEvalCategoryRows('ด้านการประยุกต์ใช้ (Application)', apItems)}
+
+                            {selectedBehaviors.length > 0 && (
+                              <React.Fragment>
+                                <tr className="bg-slate-50 font-bold">
+                                  <td colSpan={colCount} className="border border-black p-2 pl-4">ส่วนที่ 2 ด้านกิจนิสัย</td>
+                                </tr>
+                                {selectedBehaviors.map((beh, i) => (
+                                  <tr key={`beh-${i}`} className="align-top">
+                                    <td className="border border-black p-2 pl-4 text-left">{i + 1}. {beh}</td>
+                                    {Array.from({ length: colCount - 2 }).map((_, j) => <td key={j} className="border border-black p-2"></td>)}
+                                    <td className="border border-black p-2"></td>
+                                  </tr>
+                                ))}
+                              </React.Fragment>
+                            )}
                           </tbody>
                         </table>
 
@@ -1420,20 +1634,14 @@ const App = () => {
                             <tr className="bg-slate-50 font-bold">
                               <td colSpan={colCount} className="border border-black p-2 pl-4">ส่วนที่ 1 การปฏิบัติงานย่อย</td>
                             </tr>
-                            {mainTask.subTasks.length > 0 ? mainTask.subTasks.map((st, i) => (
-                              <tr key={i} className="align-top">
-                                <td className="border border-black p-2 pl-4 text-left">{mIdx + 1}.{i + 1} {cleanTaskName(st.workplaceName)}</td>
-                                {Array.from({ length: colCount - 2 }).map((_, j) => <td key={j} className="border border-black p-2"></td>)}
-                                <td className="border border-black p-2"></td>
-                              </tr>
-                            )) : (
-                              <tr>
-                                <td colSpan={colCount} className="border border-black p-2 text-center text-slate-400">ไม่มีงานย่อยในงานหลักนี้</td>
-                              </tr>
-                            )}
+                            <tr className="align-top">
+                              <td className="border border-black p-2 pl-4 text-left">รอครูนิเทศวิเคราะห์งานจากรายวิชาต่อไป</td>
+                              {Array.from({ length: colCount - 2 }).map((_, j) => <td key={j} className="border border-black p-2"></td>)}
+                              <td className="border border-black p-2"></td>
+                            </tr>
 
                             {selectedBehaviors.length > 0 && (
-                              <>
+                              <React.Fragment>
                                 <tr className="bg-slate-50 font-bold">
                                   <td colSpan={colCount} className="border border-black p-2 pl-4">ส่วนที่ 2 ด้านกิจนิสัย</td>
                                 </tr>
@@ -1444,7 +1652,7 @@ const App = () => {
                                     <td className="border border-black p-2"></td>
                                   </tr>
                                 ))}
-                              </>
+                              </React.Fragment>
                             )}
                           </tbody>
                         </table>
@@ -1608,25 +1816,161 @@ const App = () => {
             </div>
           </div>
         )}
+
+        {/* SHARE TAB (แชร์แผนฝึก) */}
+        {activeTab === 'share' && (
+          <div className="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-bottom-5 duration-500 font-serif">
+            {/* โซนอัปโหลดและแชร์ขึ้นคลาวด์ */}
+            <div className="bg-indigo-600 p-8 rounded-3xl text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6">
+              <div className="flex-1 space-y-2">
+                <h2 className="text-2xl font-black flex items-center gap-2"><UploadCloud /> แชร์แผนฝึกนี้เข้าสู่คลังกลาง</h2>
+                <p className="text-indigo-200 text-sm">เมื่อทำแผนฝึกของบริษัทเสร็จแล้ว คุณสามารถแชร์ขึ้นคลังข้อมูล เพื่อให้คุณครูท่านอื่นนำไปใช้ต่อได้</p>
+                <div className="bg-indigo-700/50 p-4 rounded-xl mt-4 border border-indigo-500/50">
+                  <p className="text-xs font-bold mb-2 flex items-center gap-1"><AlertCircle size={14} /> ข้อมูลที่จะถูกแชร์:</p>
+                  <ul className="text-xs space-y-1 list-disc list-inside pl-4 text-indigo-100">
+                    <li>ชื่อสถานประกอบการ: {config.companyName || '-'}</li>
+                    <li>จังหวัด: {config.province || '-'}</li>
+                    <li>ระดับชั้น: {config.level || '-'}</li>
+                    <li>ชื่อผู้แชร์ (ครูฝึก): {config.trainerName || '-'}</li>
+                    <li>จำนวนงานหลัก: {workplaceMainTasks.length} งาน</li>
+                  </ul>
+                </div>
+              </div>
+              <button 
+                onClick={shareToCloud} 
+                className="bg-white text-indigo-600 px-8 py-4 rounded-2xl font-black text-sm hover:bg-indigo-50 shadow-lg active:scale-95 transition-all w-full md:w-auto flex items-center justify-center gap-2"
+              >
+                <Cloud size={20} /> ยืนยันการแชร์ข้อมูล
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* CLOUD TAB (คลังแผนฝึกอาชีพส่วนกลาง) */}
+        {activeTab === 'cloud' && (
+          <div className="max-w-6xl mx-auto space-y-8 animate-in slide-in-from-bottom-5 duration-500 font-serif">
+            
+            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm font-serif">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 border-b border-slate-100 pb-6">
+                <div>
+                  <h2 className="text-xl font-black text-slate-800 flex items-center gap-2"><Cloud className="text-indigo-500" /> คลังแผนฝึกอาชีพส่วนกลาง</h2>
+                  <p className="text-sm text-slate-500 mt-1">เลือกดาวน์โหลดหรือนำเข้าแผนฝึกของสถานประกอบการต่างๆ ที่เพื่อนครูจัดทำไว้</p>
+                </div>
+                
+                {/* Filters */}
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                  <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <select 
+                      className="w-full sm:w-48 pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none"
+                      value={filterProvince}
+                      onChange={(e) => setFilterProvince(e.target.value)}
+                    >
+                      <option value="">ทุกจังหวัด</option>
+                      {PROVINCES.map(p => <option key={`filter-${p}`} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input 
+                      type="text" 
+                      placeholder="ค้นหาสถานประกอบการ..." 
+                      className="w-full sm:w-64 pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Data Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {cloudData.length === 0 ? (
+                  <div className="col-span-full py-16 text-center text-slate-400 font-bold flex flex-col items-center gap-2">
+                    <Loader2 className="animate-spin mb-2" size={32} />
+                    กำลังเชื่อมต่อคลังข้อมูล... หรือยังไม่มีข้อมูลในระบบ
+                  </div>
+                ) : (
+                  cloudData.filter(item => {
+                    const matchProv = filterProvince === '' || item.province === filterProvince;
+                    const matchQuery = searchQuery === '' || item.companyName?.toLowerCase().includes(searchQuery.toLowerCase());
+                    return matchProv && matchQuery;
+                  }).map((item, idx) => (
+                    <div key={item.id || idx} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-shadow group flex flex-col h-full relative">
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <h3 className="font-black text-indigo-900 text-lg leading-tight line-clamp-2 pr-6" title={item.companyName}>{item.companyName || 'ไม่ระบุชื่อบริษัท'}</h3>
+                          <button 
+                            onClick={() => setDeleteModalItem(item)} 
+                            className="absolute top-5 right-4 text-slate-300 hover:text-red-500 p-1 flex-shrink-0 transition-colors" 
+                            title="จัดการ/ลบข้อมูล"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                        <div className="space-y-2 mb-6">
+                          <p className="text-xs font-bold text-slate-600 flex items-center gap-2"><MapPin size={14} className="text-rose-500" /> {item.province || 'ไม่ระบุจังหวัด'}</p>
+                          <p className="text-xs font-bold text-slate-600 flex items-center gap-2"><User size={14} className="text-indigo-500" /> ระดับ: {item.level || item.config?.level || 'ไม่ระบุ'}</p>
+                          <p className="text-xs font-bold text-slate-600 flex items-center gap-2"><User size={14} className="text-blue-500" /> จัดทำโดย: {item.creatorName || 'ไม่ระบุ'}</p>
+                          <p className="text-[10px] text-slate-400 flex items-center gap-2 mt-2"><Clock size={12} /> อัปโหลดเมื่อ: {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString('th-TH') : 'ไม่ระบุ'}</p>
+                          
+                          {item.deleteRequest && (
+                            <div className="mt-3 bg-orange-100/80 border border-orange-200 text-orange-800 text-[10px] p-2 rounded-xl font-bold flex items-start gap-1.5">
+                              <AlertCircle size={14} className="flex-shrink-0 mt-0.5 text-orange-600" />
+                              <span>มีการแจ้งลบ: {item.deleteRequest}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 mt-auto pt-4 border-t border-slate-200">
+                        <button 
+                          onClick={() => loadFromCloudItem(item)}
+                          className="flex-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-2 rounded-xl text-xs font-black transition-colors flex justify-center items-center gap-1"
+                        >
+                          <Wand2 size={14} /> นำเข้าแก้ไข
+                        </button>
+                        <button 
+                          onClick={() => downloadCloudItemAsFile(item)}
+                          className="flex-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 py-2 rounded-xl text-xs font-black transition-colors flex justify-center items-center gap-1"
+                        >
+                          <DownloadCloud size={14} /> โหลดไฟล์
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
-      <footer className="text-center text-slate-500 text-[10px] py-8 border-t border-slate-200 mt-8 bg-white pb-24 lg:pb-8 font-serif">
+      <footer className={`text-center text-[10px] py-8 border-t mt-8 pb-24 lg:pb-8 font-serif transition-colors duration-500 ${activeTab === 'cloud' ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500'}`}>
         <p className="font-bold">© 2026 สุกฤษฏิ์พล โชติอรรฐพล. All Rights Reserved.</p>
         <p className="mt-1">ระบบวิเคราะห์เฉพาะสถานประกอบการ</p>
       </footer>
 
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 h-16 flex items-center justify-around z-50 shadow-2xl font-serif">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 h-16 flex items-center justify-around z-50 shadow-2xl font-serif px-2 overflow-x-auto overflow-y-hidden whitespace-nowrap hide-scrollbar">
         {[
           { id: 'setup', l: 'ตั้งค่า', i: Settings },
-          { id: 'workplace', l: 'วิเคราะห์งาน', i: Building2 },
+          { id: 'workplace', l: 'วิเคราะห์', i: Building2 },
           { id: 'reports', l: 'รายงาน', i: FileSpreadsheet },
-          { id: 'evaluation', l: 'แบบประเมิน', i: ClipboardCheck },
+          { id: 'evaluation', l: 'ประเมิน', i: ClipboardCheck },
+          { id: 'share', l: 'แชร์', i: UploadCloud },
+          { id: 'cloud', l: 'คลังส่วนกลาง', i: Cloud },
         ].map(nav => (
-          <button key={nav.id} onClick={() => setActiveTab(nav.id)} className={`flex flex-col items-center gap-1 ${activeTab === nav.id ? 'text-indigo-600' : 'text-slate-400'}`}>
-            <nav.i size={20} /><span className="text-[10px] font-bold font-serif">{nav.l}</span>
+          <button key={nav.id} onClick={() => setActiveTab(nav.id)} className={`flex flex-col items-center justify-center gap-1 w-16 flex-shrink-0 h-full ${activeTab === nav.id ? 'text-indigo-600 border-t-2 border-indigo-600 -mt-[1px]' : 'text-slate-400'}`}>
+            <nav.i size={18} className={activeTab === nav.id ? 'mt-1' : ''} /><span className="text-[9px] font-bold font-serif">{nav.l}</span>
           </button>
         ))}
       </nav>
+      
+      {/* เพิ่ม style สำหรับซ่อน scrollbar ใน mobile nav */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}} />
     </div>
   );
 };
