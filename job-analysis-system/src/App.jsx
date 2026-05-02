@@ -10,22 +10,7 @@ import {
   Key, Save, CheckCircle2, Cloud, Search, Filter, UploadCloud, MapPin, DownloadCloud
 } from 'lucide-react';
 
-// --- Firebase Imports ---
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
-
-// --- Firebase Setup ---
-let app, auth, db, appId;
-try {
-  const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
-  appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-} catch (e) {
-  console.error("Firebase init error", e);
-}
+const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwMZBGSWinbV8P8KCsxQXGw-v6AiPnaHW2fawUyNUu3m7bCNF6in6S7pPmNJY4gZ2uWFg/exec"; 
 
 const apiKey = "";
 const FILE_SECRET_KEY = "@Sukritpol2528"; 
@@ -48,7 +33,6 @@ const PROVINCES = [
 
 const App = () => {
   // Cloud & Auth States
-  const [authUser, setAuthUser] = useState(null);
   const [cloudData, setCloudData] = useState([]);
   const [filterProvince, setFilterProvince] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,11 +54,6 @@ const App = () => {
   const [collapsedWorkplaceSubTasks, setCollapsedWorkplaceSubTasks] = useState(new Set());
   const [statusMessage, setStatusMessage] = useState(null);
   
-  // สถานะสำหรับการจัดการลบข้อมูลคลาวด์
-  const [deleteModalItem, setDeleteModalItem] = useState(null);
-  const [adminPassword, setAdminPassword] = useState('');
-  const [deleteReason, setDeleteReason] = useState('');
-
   // ข้อมูลพื้นฐานสำหรับรายงาน
   const [config, setConfig] = useState({
     aiProvider: 'gemini',
@@ -85,7 +64,7 @@ const App = () => {
     collegeName: '',
     companyName: '',
     province: '', // เพิ่มฟิลด์จังหวัด
-    level: 'ปวช.',
+    level: 'ปวช. และ ปวส.',
     academicYear: '๒๕๖๙',
     startDate: '',
     endDate: '',
@@ -101,38 +80,23 @@ const App = () => {
     { id: Date.now(), name: '', isAnalyzing: false, isConfirmed: false, subTasks: [] }
   ]);
 
-  // --- Firebase Effects ---
-  useEffect(() => {
-    if (!auth) return;
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("Auth error:", err);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setAuthUser);
-    return () => unsubscribe();
-  }, []);
+  // --- Fetch Data from Google Sheets ---
+  const fetchCloudData = async () => {
+    try {
+      const response = await fetch(GAS_WEB_APP_URL);
+      const data = await response.json();
+      data.sort((a, b) => new Date(b.createdAtStr) - new Date(a.createdAtStr));
+      setCloudData(data);
+    } catch (err) {
+      console.error("Fetch cloud data error:", err);
+    }
+  };
 
   useEffect(() => {
-    if (!authUser || !db) return;
-    const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'workplace_plans');
-    const unsubscribe = onSnapshot(colRef, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Sort newest first in memory
-      data.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
-      setCloudData(data);
-    }, (err) => {
-      console.error("Fetch cloud data error:", err);
-    });
-    return () => unsubscribe();
-  }, [authUser]);
+    if (activeTab === 'cloud') {
+      fetchCloudData();
+    }
+  }, [activeTab]);
 
   const cleanTaskName = (name) => {
     if (!name) return '';
@@ -267,7 +231,6 @@ const App = () => {
   };
 
   const shareToCloud = async () => {
-    if (!authUser || !db) return showStatus("ระบบคลาวด์ยังไม่พร้อมใช้งาน");
     if (!config.companyName?.trim()) return showStatus("กรุณาระบุชื่อสถานประกอบการก่อนแชร์");
     if (!config.province?.trim()) return showStatus("กรุณาระบุจังหวัดของสถานประกอบการ");
     if (!config.trainerName?.trim()) return showStatus("กรุณาระบุชื่อ-สกุล ครูฝึก (ระบบจะใช้เป็นชื่อผู้แชร์)");
@@ -282,45 +245,19 @@ const App = () => {
         province: config.province,
         creatorName: config.trainerName,
         level: config.level,
-        createdAt: serverTimestamp(),
-        uid: authUser.uid
       };
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workplace_plans'), payload);
+
+      await fetch(GAS_WEB_APP_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      });
+
       showStatus("อัปโหลดและแชร์ข้อมูลเข้าสู่คลังกลางสำเร็จ!");
       setActiveTab('cloud');
     } catch (err) {
       console.error(err);
-      showStatus("เกิดข้อผิดพลาดในการอัปโหลดไปยังคลาวด์");
-    }
-  };
-
-  const handleAdminDelete = async () => {
-    if (adminPassword !== FILE_SECRET_KEY) {
-      return showStatus('รหัสผ่านแอดมินไม่ถูกต้อง!');
-    }
-    try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workplace_plans', deleteModalItem.id));
-      showStatus('ลบข้อมูลสำเร็จ (Admin)');
-      setDeleteModalItem(null);
-      setAdminPassword('');
-    } catch (e) {
-      showStatus('เกิดข้อผิดพลาดในการลบข้อมูล');
-    }
-  };
-
-  const handleRequestDelete = async () => {
-    if (!deleteReason.trim()) {
-      return showStatus('กรุณาระบุเหตุผลที่ต้องการแจ้งลบ');
-    }
-    try {
-      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workplace_plans', deleteModalItem.id), {
-        deleteRequest: deleteReason
-      });
-      showStatus('ส่งคำร้องขอลบสำเร็จ แอดมินจะดำเนินการตรวจสอบครับ');
-      setDeleteModalItem(null);
-      setDeleteReason('');
-    } catch (e) {
-      showStatus('เกิดข้อผิดพลาดในการแจ้งลบ');
+      showStatus("เกิดข้อผิดพลาดในการอัปโหลด กรุณาลองอีกครั้ง");
     }
   };
 
@@ -875,63 +812,6 @@ const App = () => {
         </div>
       )}
 
-      {/* Modal จัดการการลบข้อมูล (สำหรับ Admin / แจ้งลบ) */}
-      {deleteModalItem && (
-        <div className="fixed inset-0 z-[9999] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setDeleteModalItem(null)}>
-          <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black text-slate-800 flex items-center gap-2"><Trash2 className="text-red-500" /> จัดการลบข้อมูล</h3>
-              <button onClick={() => setDeleteModalItem(null)} className="text-slate-400 hover:text-red-500 transition-colors"><X size={24} /></button>
-            </div>
-            
-            <div className="mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-200 shadow-inner">
-              <p className="font-bold text-sm text-slate-800">แผนฝึก: {deleteModalItem.companyName}</p>
-              <p className="text-xs text-slate-500 mt-1 font-bold">จัดทำโดย: {deleteModalItem.creatorName}</p>
-            </div>
-
-            <div className="space-y-4">
-              {/* ฝั่งแจ้งลบ */}
-              <div className="border border-orange-200 bg-orange-50/50 rounded-2xl p-5">
-                <h4 className="font-bold text-orange-800 text-sm mb-2 flex items-center gap-2"><AlertCircle size={16}/> แจ้งแอดมินลบข้อมูล</h4>
-                <p className="text-xs text-orange-600 mb-3 leading-relaxed">หากพบข้อมูลซ้ำซ้อนหรือไม่เหมาะสม สามารถส่งคำร้องให้ผู้ดูแลระบบดำเนินการลบได้</p>
-                <input 
-                  type="text" 
-                  placeholder="ระบุเหตุผลที่ต้องการแจ้งลบ..." 
-                  className="w-full px-4 py-2.5 text-sm font-bold rounded-xl border border-orange-200 outline-none focus:ring-2 focus:ring-orange-400 mb-3 bg-white" 
-                  value={deleteReason} 
-                  onChange={e => setDeleteReason(e.target.value)} 
-                />
-                <button 
-                  onClick={handleRequestDelete} 
-                  className="w-full py-2.5 bg-orange-500 text-white rounded-xl text-sm font-black shadow-md hover:bg-orange-600 active:scale-95 transition-all"
-                >
-                  ส่งคำแจ้งลบ
-                </button>
-              </div>
-
-              {/* ฝั่งแอดมิน */}
-              <div className="border border-red-200 bg-red-50/50 rounded-2xl p-5">
-                <h4 className="font-bold text-red-800 text-sm mb-2 flex items-center gap-2"><Key size={16}/> สำหรับผู้ดูแลระบบ (Admin)</h4>
-                <p className="text-xs text-red-600 mb-3 leading-relaxed">ใส่รหัสผ่านแอดมินเพื่อลบข้อมูลนี้ออกจากระบบทันที</p>
-                <input 
-                  type="password" 
-                  placeholder="รหัสผ่านแอดมิน..." 
-                  className="w-full px-4 py-2.5 text-sm font-bold rounded-xl border border-red-200 outline-none focus:ring-2 focus:ring-red-400 mb-3 bg-white" 
-                  value={adminPassword} 
-                  onChange={e => setAdminPassword(e.target.value)} 
-                />
-                <button 
-                  onClick={handleAdminDelete} 
-                  className="w-full py-2.5 bg-red-600 text-white rounded-xl text-sm font-black shadow-md hover:bg-red-700 active:scale-95 transition-all"
-                >
-                  ลบข้อมูลทันที (Admin)
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* SETUP TAB */}
         {activeTab === 'setup' && (
@@ -982,7 +862,7 @@ const App = () => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                {/* จังหวัด (เพิ่มฟิลด์เฉพาะสำหรับให้กรองคลาวด์ได้ง่าย) */}
+                {/* จังหวัด */}
                 <div className="md:col-span-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 font-serif"><MapPin size={12} /> จังหวัดที่ตั้งสถานประกอบการ</label>
                     <select
@@ -1227,7 +1107,7 @@ const App = () => {
                     <div className="text-right text-[10pt] mb-2 border p-1 w-fit ml-auto italic font-serif">DVE-04-05 (ฝอ.1)</div>
                     <div className="report-header font-serif text-[11pt] space-y-1.5">
                       <h2 className="text-center font-bold underline uppercase mb-6 font-serif">แผนการฝึกอาชีพตลอดหลักสูตรร่วมกับ {config.companyName || '................'}</h2>
-                      <p>ผู้เข้ารับการฝึกระบบทวิภาคี วิทยาลัย {config.collegeName || '................'} ระดับชั้น {config.level || '................'} กลุ่มอาชีพ {config.group || '................'} สาขาวิชา {config.major || '................'}</p>
+                      <p>ผู้เข้ารับการฝึกระบบทวิภาคี วิทยาลัย {config.collegeName || '................'} ระดับชั้น {config.level || '................'} สาขาวิชา {config.major || '................'}</p>
                       <p>ฝึกงานปีการศึกษา {config.academicYear || '.........'} ระหว่างวันที่ {config.startDate || '.........'} ถึง วันที่ {config.endDate || '.........'} เวลาฝึก {(Number(config.daysPerWeek) || 0) * (Number(config.weeks) || 0)} วัน {totalTrainingHours} ชั่วโมง</p>
                     </div>
                     <div className="font-bold text-[12pt] mb-3 uppercase underline font-serif">๑. รายการงานที่จัดฝึกปฏิบัติจริง</div>
@@ -1265,8 +1145,7 @@ const App = () => {
 
                         <div className="report-header font-serif text-[11pt] space-y-1.5">
                           <h2 className="text-center font-black text-[14pt] underline mb-6 uppercase font-serif">แผนการฝึกอาชีพรายหน่วยสถานประกอบการ {config.companyName || '................'}</h2>
-                          <p>ผู้เข้ารับการฝึกระบบทวิภาคี วิทยาลัย {config.collegeName || '................'} ระดับชั้น {config.level || '................'} กลุ่มอาชีพ {config.group || '................'}</p>
-                          <p>สาขาวิชา {config.major || '................'}</p>
+                          <p>ผู้เข้ารับการฝึกระบบทวิภาคี วิทยาลัย {config.collegeName || '................'} ระดับชั้น {config.level || '................'}</p>
                           <p>อาชีพ / ตำแหน่งงานที่ฝึก {config.occupation || '................'}</p>
                           <p className="mt-2 font-bold font-serif">งานหลัก {task.mainTaskIndex}. {cleanTaskName(task.parentMainTaskName) || '................'}</p>
                           <p className="font-bold text-indigo-700 font-serif">งานย่อย {task.subTaskIndex}. {cleanTaskName(task.workplaceName) || '................'} เวลาฝึก: {task.hours} วัน/ชั่วโมง</p>
@@ -1382,67 +1261,14 @@ const App = () => {
                 </div>
               </div>
 
-              {/* พื้นที่สำหรับสร้างเอกสาร แบบประเมินปฏิบัติงานเดิม (รายงานย่อย K,S,A,Ap) */}
+              {/* พื้นที่สำหรับสร้างเอกสาร แบบประเมินปฏิบัติงานเดิม (รายงานย่อย ขั้นตอนการปฏิบัติงาน) */}
               {activeEvalView === 'eval_workplace' && (
                 <div id="dve-eval-workplace-area" className="font-serif">
                   {workplaceTasksFlat.map((task, idx) => {
-                    const kItems = task.detailed_steps?.map(s => s.objectives?.k).filter(i => i && typeof i === 'string' && i.trim() !== '' && i.trim() !== '-') || [];
-                    const sItems = task.detailed_steps?.map(s => s.objectives?.s).filter(i => i && typeof i === 'string' && i.trim() !== '' && i.trim() !== '-') || [];
-                    const aItems = task.detailed_steps?.map(s => s.objectives?.a).filter(i => i && typeof i === 'string' && i.trim() !== '' && i.trim() !== '-') || [];
-                    const apItems = task.detailed_steps?.map(s => s.objectives?.ap).filter(i => i && typeof i === 'string' && i.trim() !== '' && i.trim() !== '-') || [];
-
                     let colCount = 4;
                     if (evalFormType === '5') colCount = 7;
                     if (evalFormType === '4') colCount = 6;
                     if (evalFormType === '3') colCount = 5;
-
-                    const renderEvalCategoryRows = (title, items) => {
-                      if (items.length === 0) return null;
-
-                      return (
-                        <React.Fragment key={title}>
-                          <tr className="bg-slate-50 font-bold">
-                            <td colSpan={colCount} className="border border-black p-2 pl-4">{title}</td>
-                          </tr>
-                          {items.map((item, i) => (
-                            <tr key={`${title}-${i}`} className="align-top">
-                              <td className="border border-black p-2 pl-4 text-left">{i + 1}. {item}</td>
-                              {evalFormType === 'checklist' && (
-                                <React.Fragment>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                </React.Fragment>
-                              )}
-                              {evalFormType === '5' && (
-                                <React.Fragment>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                </React.Fragment>
-                              )}
-                              {evalFormType === '4' && (
-                                <React.Fragment>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                </React.Fragment>
-                              )}
-                              {evalFormType === '3' && (
-                                <React.Fragment>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                  <td className="border border-black p-2"></td>
-                                </React.Fragment>
-                              )}
-                              <td className="border border-black p-2"></td>
-                            </tr>
-                          ))}
-                        </React.Fragment>
-                      );
-                    };
 
                     return (
                       <div key={`eval-wp-${idx}`} className="page-break mb-20 font-serif">
@@ -1458,10 +1284,12 @@ const App = () => {
                           <p><b>งานย่อยที่ปฏิบัติ:</b> {task.subTaskIndex}. {cleanTaskName(task.workplaceName) || '........................................................................................'}</p>
                         </div>
 
+                        <p className="mb-2 font-bold text-[14pt]">คำชี้แจง โปรดทำเครื่องหมาย ✓ลงในช่องที่เห็นว่าตรงกับความเป็นจริงมากที่สุด</p>
+
                         <table className="w-full text-[12pt] border-collapse border-2 border-black font-serif mb-4">
                           <thead>
                             <tr className="bg-slate-100 font-bold text-center">
-                              <th className="border border-black p-2 w-[40%] align-middle text-left">รายการประเมิน (จุดประสงค์การปฏิบัติงาน)</th>
+                              <th className="border border-black p-2 w-[40%] align-middle text-center">หัวข้อประเมิน (งานย่อย)</th>
                               {evalFormType === 'checklist' && (
                                 <>
                                   <th className="border border-black p-2 w-20 align-middle">ทำได้</th>
@@ -1496,10 +1324,20 @@ const App = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {renderEvalCategoryRows('ด้านพุทธิพิสัย (Knowledge)', kItems)}
-                            {renderEvalCategoryRows('ด้านทักษะพิสัย (Skill)', sItems)}
-                            {renderEvalCategoryRows('ด้านจิตพิสัย (Attitude)', aItems)}
-                            {renderEvalCategoryRows('ด้านการประยุกต์ใช้ (Application)', apItems)}
+                            <tr className="bg-slate-50 font-bold">
+                              <td colSpan={colCount} className="border border-black p-2 pl-4">ส่วนที่ 1 การปฏิบัติงานย่อย</td>
+                            </tr>
+                            {task.detailed_steps?.length > 0 ? task.detailed_steps.map((step, i) => (
+                              <tr key={i} className="align-top">
+                                <td className="border border-black p-2 pl-4 text-left">{task.subTaskIndex}.{i + 1} {step.step_text}</td>
+                                {Array.from({ length: colCount - 2 }).map((_, j) => <td key={j} className="border border-black p-2"></td>)}
+                                <td className="border border-black p-2"></td>
+                              </tr>
+                            )) : (
+                              <tr>
+                                <td colSpan={colCount} className="border border-black p-2 text-center text-slate-400">ไม่มีขั้นตอนการปฏิบัติงาน</td>
+                              </tr>
+                            )}
 
                             {selectedBehaviors.length > 0 && (
                               <React.Fragment>
@@ -1634,11 +1472,14 @@ const App = () => {
                             <tr className="bg-slate-50 font-bold">
                               <td colSpan={colCount} className="border border-black p-2 pl-4">ส่วนที่ 1 การปฏิบัติงานย่อย</td>
                             </tr>
-                            <tr className="align-top">
-                              <td className="border border-black p-2 pl-4 text-left">รอครูนิเทศวิเคราะห์งานจากรายวิชาต่อไป</td>
-                              {Array.from({ length: colCount - 2 }).map((_, j) => <td key={j} className="border border-black p-2"></td>)}
-                              <td className="border border-black p-2"></td>
-                            </tr>
+                            {/* แสดงข้อความรอครูนิเทศ แทน 1.1 1.2 */}
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <tr key={`wait-${i}`} className="align-top">
+                                <td className="border border-black p-2 pl-4 text-left text-slate-500 italic">รอครูนิเทศวิเคราะห์งานจากรายวิชาต่อไป...</td>
+                                {Array.from({ length: colCount - 2 }).map((_, j) => <td key={j} className="border border-black p-2"></td>)}
+                                <td className="border border-black p-2"></td>
+                              </tr>
+                            ))}
 
                             {selectedBehaviors.length > 0 && (
                               <React.Fragment>
