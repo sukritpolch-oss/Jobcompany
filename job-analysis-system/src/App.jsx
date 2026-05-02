@@ -46,9 +46,6 @@ const App = () => {
     collegeName: '',
     companyName: '',
     level: 'ปวช.',
-    fieldOfStudy: '',
-    group: '',
-    major: '',
     academicYear: '๒๕๖๙',
     startDate: '',
     endDate: '',
@@ -108,9 +105,11 @@ const App = () => {
       });
 
       const encryptedData = encryptPayload(payload);
-      const blob = new Blob([encryptedData], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
+      // เปลี่ยน type เป็น application/octet-stream เพื่อบังคับให้มือถือ (iOS/Android) ดาวน์โหลดไฟล์แทนการเปิดอ่านบนเบราว์เซอร์
+      const blob = new Blob([encryptedData], { type: 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
+      link.style.display = 'none'; // ซ่อน element เพื่อความสวยงามในมือถือ
       link.href = url;
       
       // สร้างชื่อไฟล์จาก Company + Department + TrainerName
@@ -128,8 +127,12 @@ const App = () => {
       link.download = filename;
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      
+      // หน่วงเวลาเล็กน้อยให้มือถือประมวลผลทันก่อนลบ Object URL
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
 
       showStatus('บันทึกข้อมูลลงเครื่องสำเร็จ!');
     } catch (err) {
